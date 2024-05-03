@@ -1,0 +1,30 @@
+# python -m train --config-name=c4_a100x8x4_2b +paths.model_name=2b
+defaults:
+- c4_a100x8_base
+- _self_
+
+num_hosts: 4
+
+mesh:
+  d: 32
+  t: 1
+
+training:
+  warmup_steps: 18500
+  steps:        185000
+  steps_for_lr: 185000
+  learning_rate: 1.0e-5
+  tokens:
+    batch: 256
+
+model:
+  d_model: 4096
+  n_q_per_kv: 1
+  n_kv: 16
+  d_head: 128
+  layers: 8
+  d_ff: 16384
+  vocab: 32768
+  rope_max_timescale: 10000
+
+checkpoint_interval: 2500

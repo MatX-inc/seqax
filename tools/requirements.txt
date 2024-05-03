@@ -1,0 +1,5 @@
+zarr
+fsspec[gcs]
+transformers
+datasets
+hydra-core

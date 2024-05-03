@@ -1,0 +1,62 @@
+# python -m train --config-name=huggingface_c4_a100x1_84m +paths.model_name=hf_84m
+training:
+  seed: 0
+  tokens:
+    batch: 64
+    len: 1024
+
+  # AdamW optimizer parameters
+  # We use AdamW following Llama2's training details, see https://arxiv.org/pdf/2307.09288.pdf section 2.2
+  adam_b1: 0.9 # Exponential decay rate to track the first moment of past gradients.
+  adam_b2: 0.95 # Exponential decay rate to track the second moment of past gradients.
+  adam_eps: 1.e-8 # A small constant applied to denominator outside of the square root.
+  adam_eps_root: 0. # A small constant applied to denominator inside the square root.
+  weight_decay: 0.1 # AdamW Weight decay
+  # We take inspiration from Llama2's learning rate (LR) schedule, see https://arxiv.org/pdf/2307.09288.pdf section 2.2
+  # Learning rate schedule has two parts:
+  # 1) Linear warmup from 0 to [learning_rate] over steps 0 to [learning_rate_schedule_steps * warmup_steps_fraction]
+  # 2) Cosine decay from [learning_rate] to [learning_rate * cosine_learning_rate_final_fraction] from warmup to learning_rate_schedule_steps
+  warmup_steps: 2600
+  steps:        26000
+  steps_for_lr: 26000
+  learning_rate: 3.0e-4
+
+  cosine_learning_rate_final_fraction: 0.1 
+
+
+model:
+  d_model: 512
+  n_q_per_kv: 1
+  n_kv: 8
+  d_head: 128
+  layers: 8
+  d_ff: 4096
+  vocab: 32768
+  rope_max_timescale: 10000
+
+paths:
+  # can also be a path to GCS. IE 'gcs://your_bucket/your_output_path' 
+   root_working_dir: '~/seqax_outputs'
+
+num_hosts: 1
+
+io:
+  max_io_threads: 1024
+
+# Define either hf_dataset or flat_tokens. Do not use both.
+# hf_dataset should work as long as you have have the necessary permissions to access 
+# the dataset and tokenizer.
+hf_dataset:
+  path: allenai/c4
+  name: en
+  num_workers: 64
+  tokenizer: mistralai/Mistral-7B-v0.1 # may require huggingface-cli login
+  sequences_packed_per_batch: 120
+
+
+
+mesh:
+  d: 1
+  t: 1
+
+checkpoint_interval: 100
