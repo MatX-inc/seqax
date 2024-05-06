@@ -141,10 +141,12 @@ class Model:
     def loop_body(x: bf16[b'B/d L M/t'], layer_weights: Any) -> Tuple[bf16[b'B/d L M/t'], Tuple[()]]:
       w_q, w_kv, w_o, w_gate, w_up, w_down, ln1, ln2  = layer_weights
 
+      # Attention RMSNorm
       ln1 = shardops.all_gather('M/t/d -> M', jnp.float32(ln1))
       gx = shardops.all_gather('B/d L M/t -> B/d L M', x)
       nx = jnp.bfloat16(rms_norm(gx) * ln1)
-      # Attention
+
+      # Attention, using Grouped Query Attention and RoPE position embeddings.
       w_q = shardops.all_gather('M/d Q K/t D -> M Q K/t D', jnp.bfloat16(w_q))
       q = save_for_backward(shardops.einsum_unreduced('B/d L M, M Q K/t D -> B/d L Q K/t D', nx, w_q))
       q = rope_table.apply('L D -> 1 L 1 1 D', q)
@@ -164,18 +166,20 @@ class Model:
       attn_out = shardops.psum_scatter('B/d Qlen M -> B/d Qlen M/t', attn_out)
       x = save_for_backward(x + attn_out)
 
-      # FFN
+      # FFN RMSNorm
       ln2 = save_for_backward(shardops.all_gather('M/t/d -> M', jnp.float32(ln2)))
       gx = shardops.all_gather('B/d L M/t -> B/d L M', x)
       nx = jnp.bfloat16(rms_norm(gx) * ln2)
 
+      # FFN, using SwiGLU
       w_gate = shardops.all_gather('M/d F/t -> M F/t', jnp.bfloat16(w_gate))
-      gate_proj = save_for_backward(shardops.einsum_unreduced('B/d Qlen M, M F/t -> B/d Qlen F/t', nx, w_gate))
+      gate_proj = save_for_backward(shardops.einsum_unreduced('B/d L M, M F/t -> B/d L F/t', nx, w_gate))
       w_up = shardops.all_gather('M/d F/t -> M F/t', jnp.bfloat16(w_up))
-      up_proj = save_for_backward(shardops.einsum_unreduced('B/d Qlen M, M F/t -> B/d Qlen F/t', nx, w_up))
+      up_proj = save_for_backward(shardops.einsum_unreduced('B/d L M, M F/t -> B/d L F/t', nx, w_up))
+      y = jax.nn.silu(gate_proj) * up_proj
       w_down = shardops.all_gather('M/d F/t -> M F/t', jnp.bfloat16(w_down))
-      ffn_out = shardops.einsum_unreduced('B/d Qlen F/t, M F/t -> B/d Qlen M', jax.nn.silu(gate_proj)*up_proj, w_down)
-      ffn_out = shardops.psum_scatter('B/d Qlen M -> B/d Qlen M/t', ffn_out)
+      ffn_out = shardops.einsum_unreduced('B/d L F/t, M F/t -> B/d L M', y, w_down)
+      ffn_out = shardops.psum_scatter('B/d L M -> B/d L M/t', ffn_out)
 
       return jnp.bfloat16(x + ffn_out), ()
 
