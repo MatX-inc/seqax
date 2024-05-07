@@ -1,8 +1,0 @@
-zarr
-fsspec[gcs]
-jax==0.4.26
-einops
-hydra-core
-clearml
-clearml-agent
-typeguard==4.1.5

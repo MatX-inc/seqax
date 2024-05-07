@@ -17,7 +17,9 @@ seqax is written in a style that makes the important information visible, rather
 ### Installation
 
 1. Install `graphviz` from your system package manager: e.g. `brew install graphviz` or `apt install graphviz`.
-2. Install Python dependencies, typically inside a virtualenv: `python -m pip install -r requirements.txt`
+2. Install Python dependencies, typically inside a virtualenv: `python -m pip install -r requirements-cpu.txt`.
+
+   NOTE: the `requirements-cpu.txt` is configured for CPU-based installation. For GPU or TPU installation, you may need a different install of JAX and jaxlib. Consult the [JAX install documentation](https://jax.readthedocs.io/en/latest/installation.html). If your GPU environment has a Torch-GPU installation, you may need to switch it to a Torch-CPU installation to avoid conflicts with JAX-GPU.
 
 ### Run on CPU for local development
 

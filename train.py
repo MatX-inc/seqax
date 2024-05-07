@@ -126,14 +126,14 @@ class Model:
     x = shardops.index_unreduced('[V/t] M, B/d L -> B/d L M', embed, ids)
     x = shardops.psum_scatter('B/d L M -> B/d L M/t', x)
 
-    len = ids.shape[1]
+    L = ids.shape[1]
     segment_ids = jnp.cumsum(is_seq_start, axis=1)
     segment_mask: bool_[b'B/d L L'] = segment_ids[:, :, jnp.newaxis] == segment_ids[:, jnp.newaxis, :]
     segment_mask: bool_[b'B/d L L 1 1'] = segment_mask[..., jnp.newaxis, jnp.newaxis] # add axes for q_per_k, num_kv_heads dimensions
-    causal_mask: bool_[b'1 L L 1 1'] = jnp.tril(jnp.ones((len, len), dtype=jnp.bool_), 0)[jnp.newaxis, ..., jnp.newaxis, jnp.newaxis]
+    causal_mask: bool_[b'1 L L 1 1'] = jnp.tril(jnp.ones((L, L), dtype=jnp.bool_), 0)[jnp.newaxis, ..., jnp.newaxis, jnp.newaxis]
     causal_mask: bool_[b'B/d L L 1 1'] = jnp.logical_and(segment_mask, causal_mask)
 
-    rope_table = RopeTable.create(len, h)
+    rope_table = RopeTable.create(L, h)
 
     ##### Transformer blocks.
     @explicit_activation_checkpointing
@@ -141,7 +141,7 @@ class Model:
     def loop_body(x: bf16[b'B/d L M/t'], layer_weights: Any) -> Tuple[bf16[b'B/d L M/t'], Tuple[()]]:
       w_q, w_kv, w_o, w_gate, w_up, w_down, ln1, ln2  = layer_weights
 
-      # Attention RMSNorm
+      # Pre-attention RMSNorm
       ln1 = shardops.all_gather('M/t/d -> M', jnp.float32(ln1))
       gx = shardops.all_gather('B/d L M/t -> B/d L M', x)
       nx = jnp.bfloat16(rms_norm(gx) * ln1)
@@ -166,7 +166,7 @@ class Model:
       attn_out = shardops.psum_scatter('B/d Qlen M -> B/d Qlen M/t', attn_out)
       x = save_for_backward(x + attn_out)
 
-      # FFN RMSNorm
+      # Pre-FFN RMSNorm
       ln2 = save_for_backward(shardops.all_gather('M/t/d -> M', jnp.float32(ln2)))
       gx = shardops.all_gather('B/d L M/t -> B/d L M', x)
       nx = jnp.bfloat16(rms_norm(gx) * ln2)
@@ -176,7 +176,7 @@ class Model:
       gate_proj = save_for_backward(shardops.einsum_unreduced('B/d L M, M F/t -> B/d L F/t', nx, w_gate))
       w_up = shardops.all_gather('M/d F/t -> M F/t', jnp.bfloat16(w_up))
       up_proj = save_for_backward(shardops.einsum_unreduced('B/d L M, M F/t -> B/d L F/t', nx, w_up))
-      y = jax.nn.silu(gate_proj) * up_proj
+      y = jax.nn.swish(gate_proj) * up_proj
       w_down = shardops.all_gather('M/d F/t -> M F/t', jnp.bfloat16(w_down))
       ffn_out = shardops.einsum_unreduced('B/d L F/t, M F/t -> B/d L M', y, w_down)
       ffn_out = shardops.psum_scatter('B/d L M -> B/d L M/t', ffn_out)
