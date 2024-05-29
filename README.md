@@ -168,6 +168,10 @@ We write checkpoints and datasets in simple file formats based on [zarr](https:/
 * [our checkpoint format](/docs/pytree-zarr-checkpoint.md)
 * [our dataset format](/docs/flat-tokens.md)
 
+## Contact
+
+`seqax` is developed by the [MatX team](https://matx.com). If you're interested in working with us, you can reach us at [founders@matx.com](mailto:founders@matx.com).
+
 ## Acknowledgements
 
 seqax's implementation style was substantially inspired by [jaxtyping](https://docs.kidger.site/jaxtyping/), [einops](https://einops.rocks/), [equinox](https://docs.kidger.site/equinox/), and [shard_map](https://jax.readthedocs.io/en/latest/jep/14273-shard-map.html).
