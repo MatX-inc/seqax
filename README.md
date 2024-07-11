@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/matx.svg" width="200"/>
+</p>
+
 # seqax = sequence modeling + JAX
 
 seqax is a codebase for small-to-medium-scale LLM pretraining research. The entire training program---including the model implementation; optimizer; multihost FSDP and tensor parallel partitioning---is [500 lines of code](/train.py), which scales well up to ~100 GPUs or TPUs[^1] and [typically achieves good MFUs of 30-50%](#performance).
