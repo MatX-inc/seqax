@@ -42,7 +42,6 @@ See for example `typed_shard_map`, which is a simplification of JAX's `shard_map
 of sharding in type signatures. 
 """
 import inspect
-from operator import is_
 import typing
 from collections.abc import Sequence
 from contextvars import ContextVar
@@ -57,7 +56,6 @@ from typeguard import TypeCheckError, TypeCheckerCallable
 import dataclasses
 from dataclasses import dataclass, make_dataclass
 from typeguard import checker_lookup_functions
-from copy import deepcopy
 
 
 #### State
