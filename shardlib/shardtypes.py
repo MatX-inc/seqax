@@ -356,28 +356,14 @@ def extend_named_axes(name: Union[bytes, str], cls):
   if isinstance(name, str):
     name = name.encode('utf-8')
 
-  extended_fields = [] # list of (field_name, type)
-  for fld in dataclasses.fields(cls):
-    numtype, shape = get_origin(fld.type), get_args(fld.type)
-    extended_shape = GenericAlias(numtype, (name + b' ' + shape[0]))
-    extended_fields.append((fld.name, extended_shape))
+  if dataclasses.is_dataclass(cls):
+    extended_fields = []
+    for fld in dataclasses.fields(cls):
+      extended_type = extend_named_axes(name, fld.type)
+      extended_fields.append((fld.name, extended_type))
 
-
-  extended_cls = make_dataclass(cls.__name__, extended_fields, bases=(cls,))
-  return extended_cls
-  # extended_cls = deepcopy(cls)
-  #
-  # if isinstance(name, str):
-  #   name = name.encode('utf-8')
-  #
-  # def extend_named_axes_inplace(name: bytes, cls):
-  #   for fld in dataclasses.fields(cls):
-  #     if dataclasses.is_dataclass(fld.type):
-  #       extend_named_axes_inplace(name, fld.type)
-  #     else:
-  #       numtype, shape = get_origin(fld.type), get_args(fld.type)
-  #       fld.type = GenericAlias(numtype, (name + b' ' + shape[0],))
-  #
-  # extend_named_axes_inplace(name, extended_cls)
-
-  return extended_cls
+    return make_dataclass(cls.__name__, extended_fields, bases=(cls,))
+  else:
+    number_type, shape = get_origin(cls), get_args(cls)
+    extended_shape = (name + b' ' + shape[0],)
+    return GenericAlias(number_type, extended_shape)
