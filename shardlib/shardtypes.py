@@ -363,7 +363,7 @@ def extend_named_axes(name: Union[bytes, str], cls):
     extended_fields.append((fld.name, extended_shape))
 
 
-  extended_cls = make_dataclass(cls.__name__, extended_fields)
+  extended_cls = make_dataclass(cls.__name__, extended_fields, bases=(cls,))
   return extended_cls
   # extended_cls = deepcopy(cls)
   #
