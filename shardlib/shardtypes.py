@@ -367,3 +367,16 @@ def extend_named_axes(name: Union[bytes, str], cls):
     number_type, shape = get_origin(cls), get_args(cls)
     extended_shape = (name + b' ' + shape[0],)
     return GenericAlias(number_type, extended_shape)
+
+class Array:
+  def __class_getitem__(cls, x):
+    for axis in x[:-1]:
+      if not isinstance(axis, (bytes, str)):
+        raise ValueError(f"all but the last input to {cls.__name__} must be Union[bytes, str]")
+
+    extended_cls = x[-1]
+    for axis in reversed(x[:-1]):
+      extended_cls = extend_named_axes(axis, extended_cls)
+
+    return extended_cls
+    

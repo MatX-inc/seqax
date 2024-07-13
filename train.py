@@ -21,7 +21,7 @@ from jax.sharding import PartitionSpec
 import jax.numpy as jnp
 import math
 from input_loader import FlatTokensParams, HuggingFaceDataParams, TokenBatch, TokenBatchParams, get_loader
-from shardlib.shardtypes import bf16, bool_, f32, pytree_dataclass, u32, make_shardings, extend_named_axes
+from shardlib.shardtypes import bf16, bool_, f32, pytree_dataclass, u32, make_shardings, Array
 import shardlib.shardops as shardops
 P = PartitionSpec
 import einops
@@ -58,7 +58,7 @@ class TransformerLayer:
   w_up: f32['d_model/d d_ff/t']
   w_down: f32['d_model/d d_ff/t']
 
-Transformer = extend_named_axes('layers', TransformerLayer)
+Transformer = Array['layers', TransformerLayer]
 
 @pytree_dataclass
 class Model:
