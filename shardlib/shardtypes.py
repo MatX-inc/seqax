@@ -350,14 +350,14 @@ def is_fully_sharded(spec: jax.sharding.PartitionSpec):
       raise ValueError(f'Unknown axis type {axis}')
   return axis_count == len(jax._src.core.thread_local_state.trace_state.axis_env)
 
-def extend_named_axes(name: Union[bytes, str], cls):
+def _extend_named_axes(name: Union[bytes, str], cls):
   if isinstance(name, str):
     name = name.encode('utf-8')
 
   if dataclasses.is_dataclass(cls):
     extended_fields = []
     for fld in dataclasses.fields(cls):
-      extended_type = extend_named_axes(name, fld.type)
+      extended_type = _extend_named_axes(name, fld.type)
       extended_fields.append((fld.name, extended_type))
 
     extended_cls = make_dataclass(cls.__name__, extended_fields, bases=(cls,))
@@ -369,14 +369,10 @@ def extend_named_axes(name: Union[bytes, str], cls):
     return GenericAlias(number_type, extended_shape)
 
 class Array:
+  """
+  If `cls` is an array type of `pytree_dataclass` of array types, `Array[axes, cls]` will extend `cls` with leading axes `axes`. For example, `Array['layers', f32['batch d_model']] returns f32['layers batch d_model`]`. 
+  """
   def __class_getitem__(cls, x):
-    for axis in x[:-1]:
-      if not isinstance(axis, (bytes, str)):
-        raise ValueError(f"all but the last input to {cls.__name__} must be Union[bytes, str]")
+    return _extend_named_axes(*x)
 
-    extended_cls = x[-1]
-    for axis in reversed(x[:-1]):
-      extended_cls = extend_named_axes(axis, extended_cls)
-
-    return extended_cls
     
