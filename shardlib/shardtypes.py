@@ -360,7 +360,9 @@ def extend_named_axes(name: Union[bytes, str], cls):
       extended_type = extend_named_axes(name, fld.type)
       extended_fields.append((fld.name, extended_type))
 
-    return make_dataclass(cls.__name__, extended_fields, bases=(cls,))
+    extended_cls = make_dataclass(cls.__name__, extended_fields, bases=(cls,))
+    pytree_dataclass(extended_cls)
+    return extended_cls
   else:
     number_type, shape = get_origin(cls), get_args(cls)
     extended_shape = (name + b' ' + shape[0],)
