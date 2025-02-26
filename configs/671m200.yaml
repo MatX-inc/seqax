@@ -1,0 +1,25 @@
+# python -m train --config-name=671m200 +paths.model_name=671m200
+defaults:
+- base
+- _self_
+
+training:
+  warmup_steps: 20000
+  steps:        200000
+  steps_for_lr: 200000
+  learning_rate: 3.0e-4
+
+model:
+  d_model: 2048
+  n_q: 16
+  n_k: 16
+  n_v: 16
+  d_head: 128
+  layers: 8
+  d_ff: 8192
+  vocab: 32768
+  rope_max_timescale: 10000
+  p_threshold: 0.0
+  p_threshold_steps_fraction: 0.0
+
+checkpoint_interval: 4000

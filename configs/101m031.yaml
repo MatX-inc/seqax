@@ -1,0 +1,27 @@
+# python -m train --config-name=101m031 +paths.model_name=101m031
+defaults:
+- base
+- _self_
+
+training:
+  warmup_steps: 3100
+  steps:        31000
+  steps_for_lr: 31000
+  learning_rate: 0.0015
+  adam_b2: 0.99
+  cosine_learning_rate_final_fraction: 0.01
+
+model:
+  d_model: 512
+  n_q: 8
+  n_k: 8
+  n_v: 8
+  d_head: 128
+  layers: 8
+  d_ff: 4096
+  vocab: 32768
+  rope_max_timescale: 10000
+  p_threshold: 0.0
+  p_threshold_steps_fraction: 0.0
+
+checkpoint_interval: 2600

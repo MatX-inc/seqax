@@ -6,22 +6,25 @@ defaults:
 - _self_
 
 training:
-  warmup_steps: 10
-  steps:        50
+  warmup_steps: 2
+  steps:        5
   steps_for_lr: 100
   tokens:
-    batch: 64
-    len: 64
+    batch: 32
+    len: 128
 
 model:
   d_model: 256
-  n_q_per_kv: 2
-  n_kv: 2
+  n_q: 4
+  n_k: 2
+  n_v: 2
   d_head: 32
   layers: 2
   vocab: 1280
   d_ff: 1024
   rope_max_timescale: 256
+  p_threshold: 0.0
+  p_threshold_steps_fraction: 0.0
 
 paths:
   root_working_dir: '/tmp'

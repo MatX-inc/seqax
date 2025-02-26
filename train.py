@@ -39,21 +39,25 @@ PRNGKey = Any
 @dataclass(frozen=True)
 class Hparams:
   d_model: int
-  n_q_per_kv: int
-  n_kv: int
+  n_q: int
+  n_k: int
+  n_v: int
   d_head: int
   layers: int
   vocab: int
   d_ff: int
   rope_max_timescale: int
+  p_threshold: float
+  p_threshold_steps_fraction: float
 
 @pytree_dataclass
 class TransformerLayer:
   ln1: f32['d_model/t/d']
   ln2: f32['d_model/t/d']
-  w_q: f32['d_model/d n_q_per_kv n_kv/t d_head']
-  w_kv: f32['2 d_model/d n_kv/t d_head']
-  w_o: f32['d_model/d n_q_per_kv n_kv/t d_head']
+  w_q: f32['d_model/d Q K V G/t d_head']
+  w_k: f32['d_model/d K G/t d_head']
+  w_v: f32['d_model/d V G/t d_head']
+  w_o: f32['d_model/d Q K V G/t d_head']
   w_gate: f32['d_model/d d_ff/t']
   w_up: f32['d_model/d d_ff/t']
   w_down: f32['d_model/d d_ff/t']
@@ -70,6 +74,12 @@ class Model:
   @staticmethod
   @typechecked
   def init(h: Hparams, rng: PRNGKey) -> 'Model':
+    assert (h.n_q % math.lcm(h.n_k, h.n_v)) == 0
+    G = math.gcd(h.n_k, h.n_v)
+    K = h.n_k // G
+    V = h.n_v // G
+    Q = h.n_q // (K * V * G)
+
     embed = jax.random.normal(jax_extra.fold_in_str(rng, 'embed'), (h.vocab, h.d_model), dtype=jnp.float32)
     # https://github.com/google/jax/issues/20390 for ones_like with sharding.
     ln1 = jnp.ones((h.layers, h.d_model), dtype=jnp.float32)
@@ -84,21 +94,25 @@ class Model:
     # scale for tensors with d_model fan_in and truncated normal truncated to (-2, 2)
     d_model_scale = 1 / (math.sqrt(h.d_model) * truncated_normal_stddev)
 
-    w_kv_scale = d_model_scale
-    w_q_scale = d_model_scale / math.sqrt(h.d_head)
-    total_head_dim = h.n_q_per_kv * h.n_kv * h.d_head
-    w_o_scale = 1 / (math.sqrt(total_head_dim) * truncated_normal_stddev)
     w_up_scale = d_model_scale
     w_down_scale = 1 / (math.sqrt(h.d_ff) * truncated_normal_stddev)
     unembed_scale = d_model_scale
 
-    w_kv_shape = (h.layers, 2, h.d_model, h.n_kv, h.d_head)
-    w_kv = w_kv_scale * jax.random.truncated_normal(fold_in_str(rng, 'w_kv'), -2, 2, w_kv_shape, dtype=jnp.float32)
-    w_q_shape = (h.layers, h.d_model, h.n_q_per_kv, h.n_kv, h.d_head)
+    total_head_dim = Q * K * V * G * h.d_head
+
+    w_q_scale = d_model_scale / math.sqrt(h.d_head)
+    w_k_scale = d_model_scale
+    w_v_scale = d_model_scale
+    w_o_scale = 1 / (math.sqrt(total_head_dim) * truncated_normal_stddev)
+
+    w_q_shape = (h.layers, h.d_model, Q, K, V, G, h.d_head)
+    w_k_shape = (h.layers, h.d_model, K, G, h.d_head)
+    w_v_shape = (h.layers, h.d_model, V, G, h.d_head)
+    w_o_shape = (h.layers, h.d_model, Q, K, V, G, h.d_head)
+
     w_q = w_q_scale * jax.random.truncated_normal(fold_in_str(rng, 'w_q'), -2, 2, w_q_shape, dtype=jnp.float32)
-    w_kv_shape = (h.layers, 2, h.d_model, h.n_kv, h.d_head)
-    w_kv = w_kv_scale * jax.random.truncated_normal(fold_in_str(rng, 'w_kv'), -2, 2, w_kv_shape, dtype=jnp.float32)
-    w_o_shape = w_q_shape
+    w_k = w_k_scale * jax.random.truncated_normal(fold_in_str(rng, 'w_k'), -2, 2, w_k_shape, dtype=jnp.float32)
+    w_v = w_v_scale * jax.random.truncated_normal(fold_in_str(rng, 'w_v'), -2, 2, w_v_shape, dtype=jnp.float32)
     w_o = w_o_scale * jax.random.truncated_normal(fold_in_str(rng, 'w_o'), -2, 2, w_o_shape, dtype=jnp.float32)
 
     ff_shape = (h.layers, h.d_model, h.d_ff)
@@ -114,7 +128,8 @@ class Model:
         ln1=ln1,
         ln2=ln2,
         w_q=w_q,
-        w_kv=w_kv,
+        w_k=w_k,
+        w_v=w_v,
         w_o=w_o,
         w_gate=w_gate,
         w_up=w_up,
@@ -127,18 +142,18 @@ class Model:
 
 
   @typechecked
-  def forward_pass(self, h: Hparams, ids: u32[b'B/d L'], is_seq_start: bool_[b'B/d L']) -> f32[b'B/d L V/t']:
+  def forward_pass(self, h: Hparams, ids: u32[b'B/d L'], is_seq_start: bool_[b'B/d L'], step: u32[b''], max_steps: int) -> f32[b'B/d L vocab/t']:
     ##### Initial embedding lookup.
-    embed = shardops.all_gather('V/t M/d -> V/t M', jnp.bfloat16(self.embed))
-    x = shardops.index_unreduced('[V/t] M, B/d L -> B/d L M', embed, ids)
+    embed = shardops.all_gather('vocab/t M/d -> vocab/t M', jnp.bfloat16(self.embed))
+    x = shardops.index_unreduced('[vocab/t] M, B/d L -> B/d L M', embed, ids)
     x = shardops.psum_scatter('B/d L M -> B/d L M/t', x)
 
     L = ids.shape[1]
     segment_ids = jnp.cumsum(is_seq_start, axis=1)
     segment_mask: bool_[b'B/d L L'] = segment_ids[:, :, jnp.newaxis] == segment_ids[:, jnp.newaxis, :]
-    segment_mask: bool_[b'B/d L L 1 1'] = segment_mask[..., jnp.newaxis, jnp.newaxis] # add axes for q_per_k, num_kv_heads dimensions
-    causal_mask: bool_[b'1 L L 1 1'] = jnp.tril(jnp.ones((L, L), dtype=jnp.bool_), 0)[jnp.newaxis, ..., jnp.newaxis, jnp.newaxis]
-    causal_mask: bool_[b'B/d L L 1 1'] = jnp.logical_and(segment_mask, causal_mask)
+    segment_mask: bool_[b'B/d L L 1 1 1 1'] = segment_mask[..., jnp.newaxis, jnp.newaxis, jnp.newaxis, jnp.newaxis] # add axes for Q K V G
+    causal_mask: bool_[b'1 L L 1 1 1 1'] = jnp.tril(jnp.ones((L, L), dtype=jnp.bool_), 0)[jnp.newaxis, ..., jnp.newaxis, jnp.newaxis, jnp.newaxis, jnp.newaxis]
+    causal_mask: bool_[b'B/d L L 1 1 1 1'] = jnp.logical_and(segment_mask, causal_mask)
 
     rope_table = RopeTable.create(L, h)
 
@@ -151,23 +166,27 @@ class Model:
       gx = shardops.all_gather('B/d L M/t -> B/d L M', x)
       nx = jnp.bfloat16(rms_norm(gx) * ln1)
 
-      # Attention, using Grouped Query Attention and RoPE position embeddings.
-      w_q = shardops.all_gather('M/d Q K/t D -> M Q K/t D', jnp.bfloat16(layer_weights.w_q))
-      q = save_for_backward(shardops.einsum_unreduced('B/d L M, M Q K/t D -> B/d L Q K/t D', nx, w_q))
-      q = rope_table.apply('L D -> 1 L 1 1 D', q)
-      w_kv = shardops.all_gather('2 M/d K/t D -> 2 M K/t D', jnp.bfloat16(layer_weights.w_kv))
-      k, v = shardops.einsum_unreduced('B/d L M, k_v M K/t D -> k_v B/d L K/t D', nx, w_kv)
+      # Attention, using Sparse-V, Multi Value Attention, and RoPE position embeddings.
+      w_q = shardops.all_gather('M/d Q K V G/t D -> M Q K V G/t D', jnp.bfloat16(layer_weights.w_q))
+      q = save_for_backward(shardops.einsum_unreduced('B/d L M, M Q K V G/t D -> B/d L Q K V G/t D', nx, w_q))
+      q = rope_table.apply('L D -> 1 L 1 1 1 1 D', q)
+      w_k = shardops.all_gather('M/d K G/t D -> M K G/t D', jnp.bfloat16(layer_weights.w_k))
+      k = shardops.einsum_unreduced('B/d L M, M K G/t D -> B/d L K G/t D', nx, w_k)
       k = save_for_backward(k)
+      k = rope_table.apply('L d -> 1 L 1 1 d', k)
+      w_v = shardops.all_gather('M/d V G/t D -> M V G/t D', jnp.bfloat16(layer_weights.w_v))
+      v = shardops.einsum_unreduced('B/d L M, M V G/t D -> B/d L V G/t D', nx, w_v)
       v = save_for_backward(v)
-      k = rope_table.apply('L d -> 1 L 1 d', k)
       logits = shardops.einsum_unreduced(
-        'B/d Qlen Q K/t D, B/d Klen K/t D -> B/d Qlen Klen Q K/t', q, k, preferred_element_type=jnp.float32)
+        'B/d Qlen Q K V G/t D, B/d Klen K G/t D -> B/d Qlen Klen Q K V G/t', q, k, preferred_element_type=jnp.float32)
       logits = jnp.where(causal_mask, logits, -1e10)
       probs = jnp.bfloat16(jax.nn.softmax(logits, axis=2))
+      pt = h.p_threshold * (h.p_threshold_steps_fraction <= step / max_steps)
+      probs = jnp.where(probs < pt, 0, probs)
       attn_out = shardops.einsum_unreduced(
-        'B/d Qlen Klen Q K/t, B/d Klen K/t D -> B/d Qlen Q K/t D', probs, v)
-      w_o = shardops.all_gather('M/d Q K/t D -> M Q K/t D', jnp.bfloat16(layer_weights.w_o))
-      attn_out = shardops.einsum_unreduced('B/d Qlen Q K/t D, M Q K/t D -> B/d Qlen M', attn_out, w_o)
+        'B/d Qlen Klen Q K V G/t, B/d Klen V G/t D -> B/d Qlen Q K V G/t D', probs, v)
+      w_o = shardops.all_gather('M/d Q K V G/t D -> M Q K V G/t D', jnp.bfloat16(layer_weights.w_o))
+      attn_out = shardops.einsum_unreduced('B/d Qlen Q K V G/t D, M Q K V G/t D -> B/d Qlen M', attn_out, w_o)
       attn_out = shardops.psum_scatter('B/d Qlen M -> B/d Qlen M/t', attn_out)
       x = save_for_backward(x + attn_out)
 
@@ -194,14 +213,14 @@ class Model:
     x = shardops.all_gather('B/d L M/t -> B/d L M', x)
     ln = shardops.all_gather('M/t/d -> M', jnp.float32(self.final_layer_norm))
     x = jnp.bfloat16(rms_norm(x) * ln)
-    unembed = shardops.all_gather('V/t M/d -> V/t M', jnp.bfloat16(self.unembed))
-    logits = shardops.einsum_unreduced('B/d L M, V/t M -> B/d L V/t', x, unembed, preferred_element_type=jnp.float32)
+    unembed = shardops.all_gather('vocab/t M/d -> vocab/t M', jnp.bfloat16(self.unembed))
+    logits = shardops.einsum_unreduced('B/d L M, vocab/t M -> B/d L vocab/t', x, unembed, preferred_element_type=jnp.float32)
 
     return logits
 
 
   @typechecked
-  def loss(self, h: Hparams, batch: TokenBatch) -> f32[b'']:
+  def loss(self, h: Hparams, batch: TokenBatch, step: u32[b''], max_steps: int) -> f32[b'']:
     # Given sequence-packed targets:
     #   [[1, 2], [3, 4, 5], [6, 7, 8, 9]]
     # we want inputs:
@@ -212,13 +231,13 @@ class Model:
     is_seq_start: bool_[b'batch/d len'] = batch.is_seq_start
     inputs: u32[b'batch/d len'] = jnp.where(is_seq_start, 0, inputs)
 
-    logits: f32[b'batch/d len V/t'] = self.forward_pass(h, inputs, is_seq_start)
+    logits: f32[b'batch/d len vocab/t'] = self.forward_pass(h, inputs, is_seq_start, step, max_steps)
     max_logits: f32[b'batch/d len 1'] = lax.pmax(jnp.max(lax.stop_gradient(logits), axis=-1, keepdims=True), 't')
     logits = logits - max_logits
     sum_logits = lax.psum(jnp.sum(jnp.exp(logits), axis=-1, keepdims=True), 't')
     logsumexp = jnp.log(sum_logits)
-    logprobs: f32[b'batch/d len V/t'] = logits - logsumexp
-    logprobs_at_targets = shardops.index_unreduced('batch/d len [V/t], batch/d len -> batch/d len', logprobs, batch.targets)
+    logprobs: f32[b'batch/d len vocab/t'] = logits - logsumexp
+    logprobs_at_targets = shardops.index_unreduced('batch/d len [vocab/t], batch/d len -> batch/d len', logprobs, batch.targets)
     logprobs_at_targets = shardops.psum_scatter('batch/d len -> batch/d len/t', logprobs_at_targets)
     tokens_in_global_batch = logprobs_at_targets.size * jax.lax.psum(1, ('d', 't'))
     return -jnp.sum(logprobs_at_targets) / jnp.float32(tokens_in_global_batch)
@@ -298,7 +317,7 @@ class State:
 def training_step(state: State, step: u32[b''], h: Hparams, hparams: TrainingHparams, batch: TokenBatch) -> Tuple[Any, Metrics]:
   @partial(shardtypes.typed_shard_map, check_rep=False)  # check_rep=False for https://github.com/google/jax/issues/20335
   def sharded_step(state: State, step: u32[b''], batch: TokenBatch) -> Tuple[State, Metrics]:
-    loss, grad = jax.value_and_grad(lambda weights: weights.loss(h, batch))(state.weights)
+    loss, grad = jax.value_and_grad(lambda weights: weights.loss(h, batch, step, hparams.steps))(state.weights)
     # Gradients have already been reduced across chips because the gradient of the weight `all_gather`
     # is weight-gradient `psum_scatter`. Loss, on the other hand, hasn't been reduced across chips: if we
     # did that inside the autodiff, we'd be double-reducing the loss, effectively multiplying it by the 
