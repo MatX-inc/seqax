@@ -1,4 +1,0 @@
-dataset: "roneneldan/TinyStories"
-tokenizer: meta-llama/Llama-2-7b # may require huggingface-cli login
-# tokenizer: bytes_utf8  # Or similar, but much slower: "google/byt5-small"
-write_buffer_size_in_sequences: 65536

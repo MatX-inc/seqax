@@ -1,8 +1,0 @@
-# python -m huggingface_to_flat_tokens --config-name=c4_en max_tokens=100_000_000 +output=/your/path/to/c4_en_llama_flat_tokens
-dataset: allenai/c4
-variant: en
-tokenizer: meta-llama/Llama-2-7b   # may require huggingface-cli login
-write_buffer_size_in_sequences: 65536
-flat_tokens_config:
-  tokens_chunk_size: 4194304
-  seq_starts_chunk_size: 1048576  

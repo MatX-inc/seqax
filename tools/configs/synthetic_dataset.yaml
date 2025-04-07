@@ -1,9 +1,0 @@
-defaults:
-- config_schema
-
-seed: 1
-seq_len: 1024
-examples: 512
-flat_tokens_config:
-  tokens_chunk_size: 4194304
-  seq_starts_chunk_size: 65536
