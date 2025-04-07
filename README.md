@@ -176,6 +176,21 @@ We write checkpoints and datasets in simple file formats based on [zarr](https:/
 
 `seqax` is developed by the [MatX team](https://matx.com). If you're interested in working with us, you can reach us at [founders@matx.com](mailto:founders@matx.com).
 
+
+## Citing seqax
+
+To cite this repository:
+
+```
+@software{seqax2024github,
+  author = {Reiner Pope and Vaclav Cvicek and Daniel Heinlein and Akshay Mishra and Mahdi Nazemi and Sanjit Neelam and Rachit Tibrewal},
+  title = {seqax = sequence modeling + {JAX}},
+  url = {https://github.com/MatX-inc/seqax},
+  year = {2024},
+}
+```
+
+
 ## Acknowledgements
 
 seqax's implementation style was substantially inspired by [jaxtyping](https://docs.kidger.site/jaxtyping/), [einops](https://einops.rocks/), [equinox](https://docs.kidger.site/equinox/), and [shard_map](https://jax.readthedocs.io/en/latest/jep/14273-shard-map.html).
