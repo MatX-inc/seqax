@@ -1,0 +1,36 @@
+name: Python Lint and Format
+
+on:
+  # workflow_dispatch:
+  # push:
+  #   branches:
+  #     - 'main'
+  #   paths:
+  #     - '**.py'
+  pull_request:
+    branches:
+      - 'main'
+    paths:
+      - '**.py'
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+jobs:
+  python_lint_format:
+    # Only run on non-draft PRs
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    # Lint
+    - uses: astral-sh/ruff-action@v3.4.0
+      with:
+        version-file: 'requirements-cpu.txt'
+
+    # Format
+    - run: ruff format --check
+
