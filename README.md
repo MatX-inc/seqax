@@ -172,6 +172,12 @@ We write checkpoints and datasets in simple file formats based on [zarr](https:/
 * [our checkpoint format](/docs/pytree-zarr-checkpoint.md)
 * [our dataset format](/docs/flat-tokens.md)
 
+
+## Contributing
+
+We use [Ruff](https://docs.astral.sh/ruff/) to lint and format the Python code. Please run `ruff check` and address any linting issues, followed by `ruff format` before submitting a pull request.
+
+
 ## Contact
 
 `seqax` is developed by the [MatX team](https://matx.com). If you're interested in working with us, you can reach us at [founders@matx.com](mailto:founders@matx.com).
