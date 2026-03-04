@@ -1,3 +1,28 @@
+[project]
+name = "seqax"
+version = "0.1.0"
+description = "seqax = sequence modeling + JAX"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "clearml>=2.1.3",
+    "clearml-agent>=2.0.7",
+    "datasets>=4.6.1",
+    "einops>=0.8.2",
+    "fsspec[gcs]>=2026.2.0",
+    "hydra-core>=1.3.2",
+    "jax[cpu]==0.4.26",
+    "torch[cpu]>=2.10.0",
+    "transformers>=5.2.0",
+    "typeguard==4.1.5",
+    "zarr>=3.1.5",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.11.12",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = 'py310'
