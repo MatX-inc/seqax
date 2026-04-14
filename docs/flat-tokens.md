@@ -2,13 +2,9 @@
 
 ## Introduction
 
-The `flat-tokens` data format is a very simple data format for storing language model training data.
-Unlike some other dataset libraries, it supports efficient seeking after job restarts. It also
-supports batch size, sequence length, and "sequence packing vs not" being selected at training
-time.
+The `flat-tokens` data format is a very simple data format for storing language model training data. Unlike some dataset libraries, it supports efficient seeking after job restarts. It also supports batch size, sequence length, and "sequence packing vs not" being selected at training time.
 
-It is based on the simplest possible design: a concatenation of all tokens in the dataset, together
-with start indices of each sequence.
+It is based on the simplest possible design: a concatenation of all tokens in the dataset, together with start indices of each sequence.
 
 ## Specification
 
@@ -26,7 +22,7 @@ attributes: {
 }
 ```
 
-That is, it has two arrays, named `encoded_tokens`, `seq_starts`. 
+It has two arrays: `encoded_tokens` and `seq_starts`. 
 
 1. The `encoded_tokens` array is a concatenation of all sequences in the dataset into a long array of tokens. 
    There are no padding, beginning-of-sequence, or end-of-sequence tokens included. Tokens are encoded
@@ -35,13 +31,11 @@ That is, it has two arrays, named `encoded_tokens`, `seq_starts`.
    sequence starts, plus one final index which equals `token_count`, indicating the end of the final
    sequence.
 
-Additionally, it has one attribute, named `max_token_id`. All decoded `token_id` values in `encoded_tokens`
-must be `<= max_token_id`. (This is intended to allow readers to quickly check that their vocabulary size is 
-large enough for the dataset.)
+Additionally, it has one attribute, named `max_token_id`. All decoded `token_id` values in `encoded_tokens` must be `<= max_token_id`. This is intended to allow readers to quickly check that their vocabulary size is large enough for the dataset.
 
 ### Flat-tokens dataset
 
-A *flat-tokens dataset* is a `zarr` Group with entries "train", "validation", each of which are flat-tokens arrays.
+A *flat-tokens dataset* is a `zarr` Group with entries "train" and "validation". Each are flat-tokens arrays.
 
 ## Example
 
@@ -69,7 +63,7 @@ This is the simplest possible format supporting the following features:
   * This allows arbitrary shuffling at runtime.
   * Minimal disk seeks ("IO operations" on public clouds) per random access: just one disk seek for sequence-packed random access; just two disk seeks for non-packed random access.
 
-The sequence packing is designed such that no loss masking is required: every single token can be used as a target token. In the above example, if we used packed sequence length 8 (i.e. the whole dataset as one packed sequence),
+The sequence packing is designed such that no loss masking is required: every single token can be used as a target token. In the previous example, if we used packed sequence length 8 (i.e. the whole dataset as one packed sequence),
 at training time we'd expand the tokens into the following input and target tokens:
 
 ```

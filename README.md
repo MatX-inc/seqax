@@ -4,15 +4,15 @@
 
 # seqax = sequence modeling + JAX
 
-seqax is a codebase for small-to-medium-scale LLM pretraining research. The entire training program---including the model implementation; optimizer; multihost FSDP and tensor parallel partitioning---is [500 lines of code](/train.py), which scales well up to ~100 GPUs or TPUs[^1] and [typically achieves good MFUs of 30-50%](#performance).
+seqax is a codebase for small-to-medium-scale LLM pretraining research. The entire training program (including the model implementation, optimizer, multihost FSDP, and tensor parallel partitioning) is [500 lines of code](/train.py), which scales well up to ~100 GPUs or TPUs[^1] and [typically achieves good MFUs of 30-50%](#performance).
 
-[^1]: Achieving good performance at larger scale requires pipeline parallelism (which we have not yet implemented). At that scale, you may also care more about using custom kernels to further improve performance at the cost of code simplicity.
+[^1]: Achieving good performance at a larger scale requires pipeline parallelism (which we have not yet implemented). At that scale, you may also care more about using custom kernels to further improve performance at the cost of code simplicity.
 
-seqax is written in a style that makes the important information visible, rather than being hidden behind abstractions and indirections or being inferred automatically and unpredictably. This shows up in:
+seqax is written in a style that makes the important information visible, rather than being hidden behind abstractions and indirections or being inferred automatically and unpredictably:
 
 * **Math**. seqax implements all of the training step's math, rather than calling into external libraries. If you want to understand or change the math, it's right there!
 
-* **Memory**. All tensors that go into a model checkpoint on disk are explicits. All tensors that occupy a lot of memory, including activations saved for the backwards pass, are explicit. You can straightforwardly read the memory footprint from the source code.
+* **Memory**. All tensors that go into a model checkpoint on disk are explicits. All tensors that occupy a lot of memory, including activations saved for the backwards pass, are explicit. You can simply read the memory footprint from the source code.
 
 * **Partitioning and communication**. The partitioned layout of all tensors and operations is explicit. All interchip communication is explicit.
 
@@ -20,26 +20,26 @@ seqax is written in a style that makes the important information visible, rather
 
 ### Installation
 
-1. Install `graphviz` from your system package manager: e.g. `brew install graphviz` or `apt install graphviz`.
-2. Install Python dependencies, typically inside a virtualenv: `python -m pip install -r requirements-cpu.txt`.
+1. Install `graphviz` from your system package manager: `brew install graphviz` or `apt install graphviz`.
+2. Install Python dependencies, typically inside a `virtualenv`: `python -m pip install -r requirements-cpu.txt`.
 
-   NOTE: the `requirements-cpu.txt` is configured for CPU-based installation. For GPU or TPU installation, you may need a different install of JAX and jaxlib. Consult the [JAX install documentation](https://jax.readthedocs.io/en/latest/installation.html). If your GPU environment has a Torch-GPU installation, you may need to switch it to a Torch-CPU installation to avoid conflicts with JAX-GPU.
+   NOTE: the `requirements-cpu.txt` is configured for CPU-based installation. For GPU or TPU installation, you may need a different install of JAX and jaxlib. See the [JAX install documentation](https://jax.readthedocs.io/en/latest/installation.html). If your GPU environment has a Torch-GPU installation, you may need to switch it to a Torch-CPU installation to avoid conflicts with JAX-GPU.
 
 ### Run on CPU for local development
 
-For development and testing you can run on CPU. Typically you'd use our synthetic dataset (which is [checked into this repository](/synthetic_dataset.zarr)) or the [Huggingface data loader](#data-loaders) and you'd set XLA flags to simulate multiple devices so as to test that parallelism is working as intended:
+For development and tests, you can run seqax on the CPU. Typically, you'd use our synthetic dataset (which is [checked into this repository](/synthetic_dataset.zarr)) or the [Huggingface data loader](#data-loaders), and you'd set XLA flags to simulate multiple devices to test that parallelism is working as intended:
 
 ```
 XLA_FLAGS=--xla_force_host_platform_device_count=8 python -m train --config-name=local_test_synthetic +paths.model_name=synthetic_000
 ```
 
-The `paths.model_name` flag specifies which subdirectory on disk (inside `/tmp`) to write model checkpoints to. You'll typically want to change this when starting a new model run.
+The `paths.model_name` flag specifies which subdirectory on disk within `/tmp` used to write model checkpoints. You'll typically want to change this when starting a new model run.
 
 ### Run on GPUs
 
-We have configured a range of model sizes, to be trained on the C4 dataset with the Llama tokenizer. Browse the `configs/` directory to select your preferred configuration file. Each configuration file lists how to run it at the top.
+We have configured a range of model sizes to be trained on the C4 dataset with the Llama tokenizer. Browse the `configs/` directory to select your preferred configuration file. Each configuration file lists how to run it.
 
-You typically want to set `paths.model_name` to a unique name for each distinct training run. This path specifies which subdirectory on disk to write model checkpoints to.
+You typically want to set `paths.model_name` to a unique name for each distinct training run. This path sepcifies the local subdirectory for model checkpoints.
 
 ## Performance
 
@@ -62,13 +62,13 @@ On 4 A100x8 hosts connected with infiniband
 
 ## Data loaders
 
-seqax can stream training data directly from Huggingface (see [example config](/configs/huggingface_c4_a100x1_84m.yaml)), or can first convert the training data to a pre-tokenized format on disk which we call [flat-tokens](/docs/flat-tokens.md) (see [example config](/configs/flat_tokens_c4_a100x1_84m.yaml)). Streaming from Huggingface allows you to quickly experiment with different datasets, but it doesn't offer an efficient way to resume training from a checkpoint after a job is aborted, and it wastes some tokens from the dataset at batch boundaries. The flat-tokens format supports efficiently resuming training from a checkpoint, uses 100% of tokens for training, and also consumes less CPU time during training.
+seqax can stream training data directly from Huggingface (see [example config](/configs/huggingface_c4_a100x1_84m.yaml)), or it can first convert the training data to a pre-tokenized format on disk, which we call [flat-tokens](/docs/flat-tokens.md) (see [example config](/configs/flat_tokens_c4_a100x1_84m.yaml)). Streaming from Huggingface allows you to quickly experiment with different datasets, but it doesn't offer an efficient way to resume training from a checkpoint after a job is aborted, and it wastes some tokens from the dataset at batch boundaries. The flat-tokens format supports efficiently resuming training from a checkpoint, uses 100% of tokens for training, and consumes less CPU time during training.
 
-To pre-tokenize the training data, you can run [huggingface_to_flat_tokens.py](/tools/huggingface_to_flat_tokens.py). You'll need to first install the requirements in [/tools/requirements.txt](/tools/requirements.txt), and then you can invoke the command listed at the top of [/tools/configs/c4_en.yaml](/tools/configs/c4_en.yaml). On modern CPUs this script processes about 100M tokens per minute. You can limit the number of output tokens it processes with a configuration flag.
+To pre-tokenize the training data, you can run [huggingface_to_flat_tokens.py](/tools/huggingface_to_flat_tokens.py). You'll need to first install the requirements in [/tools/requirements.txt](/tools/requirements.txt), and then you can invoke the command listed at the top of [/tools/configs/c4_en.yaml](/tools/configs/c4_en.yaml). On modern CPUs, this script processes about 100M tokens per minute. You can limit the number of output tokens it processes with the `max_tokens` configuration flag.
 
 ## Expressing partitioning and communication with `shardlib`
 
-seqax ships with a new library called [shardlib](/shardlib) for expressing partitioning and communication with JAX, building on the ideas and style of [jaxtyping](https://docs.kidger.site/jaxtyping/), [einops](https://einops.rocks/), [equinox](https://docs.kidger.site/equinox/), and [shard_map](https://jax.readthedocs.io/en/latest/jep/14273-shard-map.html). Here we demonstrate its core ideas, to implement fully sharded data parallelism (FSDP) for a simple fully connected neural network.
+seqax ships with a new library called [shardlib](/shardlib) for expressing partitioning and communication with JAX, building on the ideas and style of [jaxtyping](https://docs.kidger.site/jaxtyping/), [einops](https://einops.rocks/), [equinox](https://docs.kidger.site/equinox/), and [shard_map](https://jax.readthedocs.io/en/latest/jep/14273-shard-map.html). Here we demonstrate its core ideas and how to implement fully sharded data parallelism (FSDP) for a simple fully connected neural network.
 
 
 ```python
@@ -160,10 +160,10 @@ def forward_pass(x, w1, w2):
 ## Profiling
 
 Every training run gathers and reports performance information:
-* the time for two training steps (including data fetching in between them). This is written to stdout.
-* model FLOPS utilization (MFU) efficiency for these steps. This is written to stdout.
-* an XLA performance profile. This is written into the model directory at `<model_dir>/plugins/profile/<date>/perfetto_trace.json.gz`
-* an rendered SVG of the optimized XLA computation graph. This is written into the model directory at `<model_dir>/training_step_optimized_hlo_<date>.svg`.
+* The time for two training steps (including data fetching in between them). This is written to stdout.
+* Model FLOPS utilization (MFU) efficiency for these steps. This is written to stdout.
+* An XLA performance profile. This is written into the model directory at `<model_dir>/plugins/profile/<date>/perfetto_trace.json.gz`.
+* A rendered SVG of the optimized XLA computation graph. This is written into the model directory at `<model_dir>/training_step_optimized_hlo_<date>.svg`.
 
 
 ## File formats
@@ -175,7 +175,12 @@ We write checkpoints and datasets in simple file formats based on [zarr](https:/
 
 ## Contributing
 
-We use [Ruff](https://docs.astral.sh/ruff/) to lint and format the Python code. Please run `ruff check` and address any linting issues, followed by `ruff format` before submitting a pull request.
+We use [Ruff](https://docs.astral.sh/ruff/) to lint and format the Python code. To contribute:
+
+1. Run `ruff check` 
+1. Address any linting issues
+1. Run `ruff format` 
+1. Submit a pull request.
 
 
 ## Contact
