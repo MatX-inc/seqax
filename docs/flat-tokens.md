@@ -22,7 +22,7 @@ attributes: {
 }
 ```
 
-That is, it has two arrays: `encoded_tokens` and `seq_starts`. 
+It has two arrays: `encoded_tokens` and `seq_starts`. 
 
 1. The `encoded_tokens` array is a concatenation of all sequences in the dataset into a long array of tokens. 
    There are no padding, beginning-of-sequence, or end-of-sequence tokens included. Tokens are encoded

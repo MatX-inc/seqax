@@ -37,9 +37,9 @@ The `paths.model_name` flag specifies which subdirectory on disk within `/tmp` u
 
 ### Run on GPUs
 
-We have configured a range of model sizes to be trained on the C4 dataset with the Llama tokenizer. Browse the `configs/` directory to select your preferred configuration file. Each configuration file lists how to run it at the top.
+We have configured a range of model sizes to be trained on the C4 dataset with the Llama tokenizer. Browse the `configs/` directory to select your preferred configuration file. Each configuration file lists how to run it.
 
-You typically want to set `paths.model_name` to a unique name for each distinct training run. This path specifies which subdirectory on disk are used to write model checkpoints.
+You typically want to set `paths.model_name` to a unique name for each distinct training run. This path sepcifies the local subdirectory for model checkpoints.
 
 ## Performance
 

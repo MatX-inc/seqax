@@ -14,7 +14,7 @@ The `zarr` of a PyTree may be written to disk with any compression and chunk siz
 
 We use `zarr` to support parallel writers from different hosts in a fully-sharded training setup. Parallel writers in this scenario must choose a chunk size that divides the data size per host to avoid `zarr` race conditions during writing. Readers of the checkpoint format do not need to be aware that it was written in parallel, as this is hidden by the `zarr` abstraction.
 
-We use the `write_completed` attribute to allow parallel writers to support a "two phase commit" protocol: 
+We use the `write_completed` attribute to allow parallel writers to support a two-phase commit protocol: 
 
 1. All writers write their data chunks, then wait for a global barrier.
 1. The "leader" writer sets the `write_completed` attribute. 
